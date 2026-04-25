@@ -55,7 +55,7 @@ data-pipeline/
 ├── great_expectations/gx/         # Contexto GX, expectations e Data Docs
 ├── Dockerfile
 ├── docker-compose.yml
-└── requirements.txt
+└── pyproject.toml
 ```
 
 ### Topologia do DAG
@@ -569,7 +569,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install -r requirements.txt
+      - run: pip install poetry && poetry install --without dev
       - run: pytest tests/unit --cov=src --cov-fail-under=80
 
   lint:

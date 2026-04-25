@@ -21,5 +21,8 @@ logs/
 airflow.db
 airflow.cfg
 
+# Poetry — generated; rebuild with: make lock
+poetry.lock
+
 # OS
 .DS_Store

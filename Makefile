@@ -109,16 +109,17 @@ results: ## Print the output CSVs to terminal
 # ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------
+.PHONY: lock
+lock: ## Regenerate poetry.lock inside the webserver container
+	$(EXEC) sh -c "poetry lock --no-update && cp poetry.lock /opt/airflow/"
+
 .PHONY: test
 test: ## Run unit tests inside the webserver container
-	$(COMPOSE) exec -T airflow-webserver \
-	  python -m pytest tests/unit -v
+	$(EXEC) sh -c "poetry install --with dev --no-root --no-interaction --no-ansi -q && python -m pytest tests/unit -v"
 
 .PHONY: test-cov
 test-cov: ## Run unit tests with coverage report
-	$(COMPOSE) exec -T airflow-webserver \
-	  python -m pytest tests/unit -v \
-	  --cov=src --cov-report=term-missing --cov-report=html:htmlcov
+	$(EXEC) sh -c "poetry install --with dev --no-root --no-interaction --no-ansi -q && python -m pytest tests/unit -v --cov=src --cov-report=term-missing --cov-report=html:htmlcov"
 
 # ---------------------------------------------------------------------------
 # Logs
