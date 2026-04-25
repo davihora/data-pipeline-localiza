@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Environment
+.env
+
+# Pipeline generated data
+data/staging/
+data/output/
+
+# Great Expectations uncommitted artefacts
+great_expectations/uncommitted/
+
+# Airflow
+logs/
+airflow.db
+airflow.cfg
+
+# OS
+.DS_Store
