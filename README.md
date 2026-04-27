@@ -1,6 +1,3 @@
-<img width="400" height="200" alt="image" src="https://github.com/user-attachments/assets/d69c4e3d-091b-41a4-bf42-8302d0667294" />
-
-
 # Blockchain Transactions Pipeline
 
 Pipeline de dados ponta a ponta para ingestão, limpeza, validação e agregação de transações blockchain — orquestrado com Apache Airflow e containerizado via Docker Compose.
@@ -138,92 +135,114 @@ O SQLite é usado como banco de metadados do Airflow (sem necessidade de um serv
 ### Pré-requisitos
 
 - Docker Desktop (ou Colima no macOS)
-- `make` (pré-instalado no macOS e Linux)
+- `make` (pré-instalado no macOS/Linux)
 - ~2 GB de espaço em disco
 
-### Execução completa (uma linha)
+### Execução com Make (recomendado)
+
+O projeto inclui um Makefile que orquestra todo o ciclo de vida do pipeline. Liste os alvos disponíveis com:
 
 ```bash
 cd data-pipeline
+make help
+```
+
+#### Executar tudo de uma vez
+
+```bash
 make pipeline
 ```
 
-Este comando executa toda a cadeia em sequência: `setup → build → init → up → run → wait → results`. Ao final, os CSVs de saída são impressos no terminal.
+Equivale a executar em sequência: `setup` → `build` → `init` → `up` → `run` → `wait` → `results`. Útil para reproduzir o pipeline do zero.
 
-### Execução passo a passo
-
-Execute os comandos abaixo **em ordem** a partir do diretório `data-pipeline/`:
+#### Passo a passo
 
 ```bash
-# 1. Cria os diretórios necessários e o arquivo .env (se ausente)
+# Criar diretórios e .env (se não existirem)
 make setup
-```
-> Garante que `data/staging`, `data/output`, `logs/` e `plugins/` existam no host e que o `.env` esteja presente. Seguro executar múltiplas vezes.
 
-```bash
-# 2. Constrói a imagem Docker customizada do Airflow
+# Construir a imagem Docker customizada
 make build
-```
-> Executa `docker compose build`, instalando todas as dependências Python (`requirements.txt`) na imagem. Necessário apenas na primeira vez ou após alterar o `Dockerfile`/`requirements.txt`.
 
-```bash
-# 3. Inicializa o banco de metadados do Airflow e cria o usuário admin
+# Inicializar o banco de metadados do Airflow e criar o usuário admin
 make init
-```
-> Executa `airflow db migrate` e cria o usuário `admin/admin`. Necessário apenas uma vez. O container `airflow-init` encerra sozinho ao terminar.
 
-```bash
-# 4. Sobe o webserver e o scheduler em background
+# Subir webserver e scheduler em background (aguarda o healthcheck)
 make up
-```
-> Inicia os dois serviços e aguarda o webserver reportar `healthy` antes de retornar. A UI estará disponível em **http://localhost:8080** (usuário: `admin`, senha: `admin`).
 
-```bash
-# 5. Dispara o DAG
+# Disparar o DAG
 make run
-```
-> Envia um trigger manual para o DAG `transactions_pipeline` via CLI do Airflow. O run fica em estado `queued` até o scheduler alocá-lo.
 
-```bash
-# 6. Aguarda a conclusão (polling a cada ~5 s)
+# Acompanhar a execução até a conclusão (polling a cada 5 s)
 make wait
-```
-> Consulta o estado do run mais recente em loop até receber `success` ou `failed`. Pressione `Ctrl-C` para interromper o polling sem cancelar o DAG. Em caso de falha, use `make logs-scheduler` para inspecionar o erro.
 
-```bash
-# 7. Exibe os resultados no terminal
+# Imprimir os CSVs de saída no terminal
 make results
 ```
-> Imprime `table1_region_risk.csv` e `table2_top3_receivers.csv` formatados em colunas.
+
+#### Referência de alvos
+
+| Alvo | Descrição |
+|---|---|
+| `make pipeline` | Ciclo completo: setup → build → init → up → run → wait → results |
+| `make setup` | Cria diretórios e `.env` a partir do `.env.example` |
+| `make build` | Constrói a imagem Docker |
+| `make init` | Inicializa o banco Airflow e cria o usuário admin |
+| `make up` | Sobe webserver + scheduler (aguarda healthcheck) |
+| `make run` | Dispara o DAG `transactions_pipeline` |
+| `make wait` | Polling até o run terminar (sucesso ou falha) |
+| `make status` | Lista todos os runs do DAG em formato tabular |
+| `make results` | Imprime os CSVs de saída formatados no terminal |
+| `make logs-scheduler` | Tail dos logs do container scheduler |
+| `make logs-webserver` | Tail dos logs do container webserver |
+| `make clean-data` | Remove artefatos de staging e output (mantém dados raw) |
+| `make reset` | Para containers + apaga todos os dados gerados |
+| `make down` | Para todos os containers |
+
+O webserver estará disponível em **http://localhost:8080** (credenciais: `admin` / `admin`).
+
+### Configuração manual (alternativa)
 
 ```bash
-# 8. Para todos os containers
-make down
+# 1. Entre no diretório do projeto
+cd data-pipeline
+
+# 2. Inicialize o banco de metadados do Airflow e crie o usuário admin
+docker compose up airflow-init
+
+# 3. Suba o webserver e o scheduler
+docker compose up -d airflow-webserver airflow-scheduler
 ```
-> Executa `docker compose down`. Os dados em `data/output/` e `data/staging/` são preservados.
 
----
+#### Disparar o pipeline manualmente
 
-### Referência rápida de targets
+Pela UI: habilite o DAG `transactions_pipeline` e clique em **Trigger DAG**.
 
-| Comando | O que faz |
-|---|---|
-| `make pipeline` | Atalho completo: `setup → build → init → up → run → wait → results` |
-| `make setup` | Cria diretórios e `.env` se ausentes |
-| `make build` | Builda a imagem Docker |
-| `make init` | Inicializa o banco de metadados do Airflow |
-| `make up` | Sobe webserver e scheduler, aguarda healthcheck |
-| `make run` | Dispara o DAG uma vez |
-| `make wait` | Polling até `success` ou `failed` |
-| `make status` | Lista todos os runs do DAG em formato tabular |
-| `make results` | Imprime os CSVs de saída no terminal |
-| `make down` | Para e remove os containers |
-| `make reset` | `down` + apaga staging/output + `airflow.db` |
-| `make clean-data` | Remove apenas staging e output (mantém dados brutos) |
-| `make test` | Roda os testes unitários dentro do container |
-| `make test-cov` | Roda os testes com relatório de cobertura HTML |
-| `make logs-scheduler` | Tail dos logs do scheduler (útil para debug) |
-| `make logs-webserver` | Tail dos logs do webserver |
+Pela CLI:
+```bash
+docker compose exec airflow-webserver \
+  airflow dags trigger transactions_pipeline
+```
+
+#### Verificar os resultados
+
+```bash
+# Tabela 1
+cat data/output/table1_region_risk.csv
+
+# Tabela 2
+cat data/output/table2_top3_receivers.csv
+```
+
+#### Encerrar
+
+```bash
+# Via Make
+make down
+
+# Via Docker Compose
+docker compose down
+```
 
 ---
 
@@ -249,6 +268,403 @@ great_expectations/gx/uncommitted/data_docs/local_site/index.html
 ```
 
 Abra o arquivo no navegador para ver o detalhamento de quais expectations passaram ou falharam.
+
+---
+
+## Testes unitários
+
+Os testes cobrem os quatro módulos `src/` com pytest e fixtures reutilizáveis em `tests/conftest.py`.
+
+### Estrutura
+
+```
+tests/
+  conftest.py              # fixtures compartilhadas (tmp_raw_dir, make_parquet, clean_parquet)
+  unit/
+    test_reader.py         # ingestion/reader.py — 10 casos
+    test_cleaner.py        # cleaning/cleaner.py — 14 casos
+    test_aggregations.py   # transforms/aggregations.py — 11 casos
+    test_dq_suite.py       # quality/dq_suite.py — 14 casos
+```
+
+### Executar
+
+```bash
+# Dentro do container (recomendado — mesmas dependências do pipeline)
+make test
+
+# Com relatório de cobertura HTML em htmlcov/
+make test-cov
+
+# Localmente (requer dependências instaladas)
+cd data-pipeline
+python -m pytest tests/unit -v
+```
+
+### Cobertura por módulo
+
+| Módulo | Casos | O que é verificado |
+|---|---|---|
+| `ingestion/reader.py` | 10 | Ordenação de partições, diretório vazio, arquivo vazio, variantes de null, multi-partição, colunas faltantes |
+| `cleaning/cleaner.py` | 14 | Deduplicação, nulls críticos, amount ≤ 0, normalização de endereços, enums inválidos, region numérica, input vazio |
+| `transforms/aggregations.py` | 11 | Agrupamento por região, ordenação desc, limite de 3, latest sale por endereço, sem sales, input vazio |
+| `quality/dq_suite.py` | 14 | compliance 100%, null counts, amount inválido, endereço uppercase, risk_score fora do range, anomaly breakdown |
+
+> `run_gx_suite` não é testado unitariamente — tem side-effects de I/O (GX context, Data Docs HTML) e pertence a testes de integração.
+
+---
+
+## Arquitetura sugerida na AWS
+
+A arquitetura separa responsabilidades em três camadas: orquestração (MWAA), processamento (ECS Fargate) e transformação SQL (Athena). O MWAA fica leve — apenas dispara tarefas — enquanto cada etapa intensiva roda em container dedicado com recursos ajustáveis de forma independente.
+
+### Trigger automático por evento S3
+
+O DAG é auto-perpetuante: após cada execução bem-sucedida, `TriggerDagRunOperator` cria imediatamente uma nova run que estaciona em `SqsSensor` aguardando a próxima mensagem. Nenhuma infraestrutura externa é necessária além da fila SQS.
+
+```
+S3 bucket/raw/part_N.csv
+        │
+        │  S3 Event Notification (ObjectCreated, prefix=raw/, suffix=.csv)
+        ▼
+  ┌───────────┐
+  │    SQS    │   fila gerenciada, retenção configurável
+  └─────┬─────┘
+        │  SqsSensor (mode=reschedule, poke 30 s)
+        ▼
+  Run N  ──► ingest ──► clean ──► dq_check ──► transforms ──► export
+                                                                  │
+                                                    TriggerDagRunOperator
+                                                                  │
+  Run N+1 ──► [SqsSensor aguardando] ◄─────────────────────────────┘
+```
+
+`SqsSensor` usa `mode=reschedule` — libera o slot de worker entre pokes, então o DAG não consome recursos enquanto aguarda.
+
+Quando `SQS_QUEUE_URL` não está definida (execução local), as tasks `sqs_listener` e `trigger_next_run` são omitidas automaticamente e o pipeline funciona como antes.
+
+### Diagrama completo
+
+```
+  S3 bucket/raw/      SQS             MWAA
+  new CSV ──────► ObjectCreated ──► sqs_listener (sensor, reschedule)
+                                          │
+                   ┌────────────────────────────────────────────────┐
+                   │                    AWS                         │
+                   │                                                │
+                   │  Amazon S3                                     │
+                   │  ┌────────────────────────────────────────┐    │
+                   │  │ /raw/  /staging/          /output/     │    │
+                   │  │ *.csv  *_raw.parquet       *.csv        │    │
+                   │  │        *_clean.parquet     *.parquet   │    │
+                   │  └────────────────────────────────────────┘    │
+                   │                                                │
+                   │  MWAA (orquestrador — não executa processamento)│
+                   │  ┌────────────────────────────────────────┐    │
+                   │  │  sqs_listener  (SqsSensor)             │    │
+                   │  │       │                                │    │
+                   │  │  validate_raw_input                    │    │
+                   │  │       │                                │    │
+                   │  │  ECSOperator ──► Fargate: ingest        │    │
+                   │  │       │                                │    │
+                   │  │  ECSOperator ──► Fargate: clean         │    │
+                   │  │       │                                │    │
+                   │  │  ECSOperator ──► Fargate: dq_check      │    │
+                   │  │       │                                │    │
+                   │  │  ┌────┴──────────────────┐            │    │
+                   │  │  AthenaOp           AthenaOp          │    │
+                   │  │  transform_table1   transform_table2  │    │
+                   │  │  └────┬──────────────────┘            │    │
+                   │  │  AthenaOp: export_results              │    │
+                   │  │       │                                │    │
+                   │  │  trigger_next_run  (TriggerDagRunOp)  │    │
+                   │  └───────┼────────────────────────────────┘    │
+                   │          │ nova run → volta ao sqs_listener     │
+                   │          ▼                                      │
+                   │  ┌────────────┐  ┌──────────┐  ┌───────────┐   │
+                   │  │   Athena   │  │QuickSight│  │    ECR    │   │
+                   │  └────────────┘  └──────────┘  └───────────┘   │
+                   │  ┌────────────┐  ┌────────────────────────┐    │
+                   │  │  Secrets   │  │    Amazon CloudWatch   │    │
+                   │  │  Manager   │  │  (logs, alarmes)       │    │
+                   │  └────────────┘  └────────────────────────┘    │
+                   └────────────────────────────────────────────────┘
+```
+
+### Mapeamento local → AWS
+
+| Componente local | Serviço AWS | Observação |
+|---|---|---|
+| `data/raw/`, `data/staging/`, `data/output/` | Amazon S3 | Prefixos `s3://bucket/raw/`, `/staging/`, `/output/` |
+| Trigger manual (`make run`) | Amazon SQS + S3 Event Notification | Novo CSV em `raw/` envia mensagem para fila SQS; `SqsSensor` consome |
+| Docker Compose + Airflow local | Amazon MWAA | Orquestrador puro; usa `ECSOperator` e `AthenaOperator` |
+| Tasks `ingest`, `clean`, `dq_check` | ECS Fargate (via `ECSOperator`) | Container dedicado por task; CPU/RAM configuráveis individualmente |
+| Tasks `transform_table1/2`, `export_results` | Amazon Athena (via `AthenaOperator`) | `GROUP BY` e window functions puras; sem servidor; custo por query |
+| Imagem Docker customizada | Amazon ECR | Mesma imagem usada pelo MWAA e pelos containers Fargate |
+| `airflow.db` (SQLite) | Aurora PostgreSQL (gerenciado pelo MWAA) | Substituição automática, sem ação manual |
+| Variáveis em `.env` | AWS Secrets Manager | Fernet key e credenciais injetadas via `SecretsManagerBackend` |
+| Logs em `logs/` | Amazon CloudWatch Logs | Integração nativa do MWAA e dos containers Fargate |
+| Great Expectations (local) | Great Expectations + S3 Data Docs | Stores e Data Docs configurados para bucket S3 |
+| `cat data/output/*.csv` | Amazon Athena / QuickSight | Query direta nos Parquet; dashboards opcionais via QuickSight |
+
+### Mudanças necessárias no código
+
+**1. Substituir `PythonOperator` por `ECSOperator` nas tasks intensivas:**
+
+```python
+from airflow.providers.amazon.aws.operators.ecs import EcsRunTaskOperator
+
+ingest = EcsRunTaskOperator(
+    task_id="ingest",
+    cluster="data-pipeline-cluster",
+    task_definition="data-pipeline-ingest",
+    launch_type="FARGATE",
+    overrides={
+        "containerOverrides": [{
+            "name": "pipeline",
+            "command": ["python", "-m", "ingestion.reader"],
+            "environment": [
+                {"name": "PIPELINE_RAW_DIR",     "value": "s3://bucket/raw/"},
+                {"name": "PIPELINE_STAGING_DIR", "value": "s3://bucket/staging/"},
+            ],
+        }]
+    },
+    network_configuration={"awsvpcConfiguration": {
+        "subnets": ["subnet-xxxx"],
+        "securityGroups": ["sg-xxxx"],
+        "assignPublicIp": "ENABLED",
+    }},
+)
+```
+
+**2. Substituir `transform_table1/2` e `export_results` por `AthenaOperator`:**
+
+```python
+from airflow.providers.amazon.aws.operators.athena import AthenaOperator
+
+transform_t1 = AthenaOperator(
+    task_id="transform_table1",
+    query="""
+        SELECT location_region,
+               AVG(risk_score)        AS avg_risk_score,
+               COUNT(*)               AS transaction_count
+        FROM   "pipeline_db"."transactions_clean"
+        GROUP  BY location_region
+        ORDER  BY avg_risk_score DESC
+    """,
+    database="pipeline_db",
+    output_location="s3://bucket/output/athena_results/",
+)
+```
+
+**3. Habilitar `httpfs` no DuckDB nos containers Fargate (tasks `ingest` e `clean`):**
+
+```python
+con.execute("INSTALL httpfs; LOAD httpfs;")
+con.execute("SET s3_region = 'us-east-1';")
+```
+
+**4. Configurar stores do Great Expectations para S3:**
+
+```yaml
+stores:
+  validations_store:
+    class_name: ValidationsStore
+    store_backend:
+      class_name: TupleS3StoreBackend
+      bucket: my-pipeline-bucket
+      prefix: gx/validations/
+data_docs_sites:
+  s3_site:
+    class_name: SiteBuilder
+    store_backend:
+      class_name: TupleS3StoreBackend
+      bucket: my-pipeline-bucket
+      prefix: gx/data_docs/
+```
+
+**5. Publicar a imagem no ECR:**
+
+```bash
+aws ecr get-login-password | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
+docker build -t data-pipeline-airflow .
+docker tag data-pipeline-airflow:latest <account>.dkr.ecr.<region>.amazonaws.com/data-pipeline-airflow:latest
+docker push <account>.dkr.ecr.<region>.amazonaws.com/data-pipeline-airflow:latest
+```
+
+### Por que essa combinação?
+
+**MWAA leve** — não executa processamento; apenas agenda e monitora tarefas, o que reduz o tamanho e o custo do ambiente Airflow.
+
+**ECS Fargate por task** — cada etapa intensiva (`ingest`, `clean`, `dq_check`) tem CPU e memória ajustados de forma independente; o container morre ao terminar, sem custo ocioso.
+
+**Athena para transformações** — `transform_table1/2` são `GROUP BY` e window functions puras sobre Parquet no S3; Athena executa sem servidor e cobra por quantidade de dados escaneados (tipicamente centavos por execução).
+
+**SQS + `SqsSensor`** — o próprio Airflow consome a fila usando `mode=reschedule`, liberando o worker slot entre pokes. Basta configurar o S3 Event Notification para enviar mensagens à fila SQS.
+
+**Auto-perpetuação via `TriggerDagRunOperator`** — elimina cron jobs e garante que sempre há exatamente uma run estacionada na fila, processando cada arquivo na ordem de chegada.
+
+**Secrets Manager** — elimina o `.env` em produção e centraliza a rotação de credenciais sem redeploy.
+
+---
+
+## IaC com Terraform
+
+Toda a infraestrutura AWS é provisionada e versionada via Terraform, organizada em módulos independentes:
+
+```
+infra/terraform/
+  main.tf            # provider AWS, backend S3 + DynamoDB (state remoto e lock)
+  variables.tf       # região, nomes de buckets, config MWAA
+  outputs.tf         # ARNs e URLs exportados
+  modules/
+    s3/              # 3 buckets (raw, staging, output) + versionamento + lifecycle
+    sqs/             # fila principal + DLQ + S3 Event Notification (prefix=raw/, suffix=.csv)
+    mwaa/            # ambiente MWAA + IAM role + security groups
+    ecr/             # repositório de imagem + política de lifecycle
+    monitoring/      # CloudWatch Alarms + SNS topic + subscrições (e-mail, Slack, Teams)
+```
+
+**Recursos provisionados:**
+
+| Módulo | Recursos |
+|---|---|
+| `s3` | `aws_s3_bucket` × 3, `aws_s3_bucket_versioning`, `aws_s3_bucket_lifecycle_configuration` |
+| `sqs` | `aws_sqs_queue` (principal + DLQ), `aws_s3_bucket_notification` |
+| `mwaa` | `aws_mwaa_environment`, `aws_iam_role`, `aws_iam_role_policy`, `aws_security_group` |
+| `ecr` | `aws_ecr_repository`, `aws_ecr_lifecycle_policy` |
+| `monitoring` | `aws_cloudwatch_metric_alarm` × N, `aws_sns_topic`, `aws_sns_topic_subscription` |
+
+**Inicializar e aplicar:**
+
+```bash
+cd infra/terraform
+terraform init
+terraform plan -var-file=envs/prod.tfvars
+terraform apply -var-file=envs/prod.tfvars
+```
+
+---
+
+## CI/CD com GitHub Actions
+
+Pipeline de 4 stages em `.github/workflows/pipeline.yml`:
+
+```
+push / PR
+    │
+    ├── [test]         python -m pytest tests/unit --cov=src
+    ├── [lint]         ruff check src/ tests/ dags/
+    │
+    │   (apenas branch main)
+    ├── [build-push]   docker build → aws ecr push
+    └── [deploy]       aws s3 sync dags/ → s3://bucket/dags/
+                       terraform apply (infra changes)
+```
+
+```yaml
+# .github/workflows/pipeline.yml (estrutura)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r requirements.txt
+      - run: pytest tests/unit --cov=src --cov-fail-under=80
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install ruff && ruff check src/ tests/ dags/
+
+  build-push:
+    needs: [test, lint]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/amazon-ecr-login@v2
+      - run: |
+          docker build -t $ECR_REPO:$GITHUB_SHA .
+          docker push $ECR_REPO:$GITHUB_SHA
+
+  deploy:
+    needs: build-push
+    steps:
+      - run: aws s3 sync dags/ s3://$MWAA_BUCKET/dags/
+      - run: cd infra/terraform && terraform apply -auto-approve
+```
+
+---
+
+## Catálogo de dados (AWS Glue Data Catalog)
+
+Um Glue Crawler varre os prefixos S3 e registra as tabelas automaticamente no Catálogo, que o Athena usa como fonte de metadados:
+
+```
+Glue Crawler
+  ├── s3://bucket/staging/transactions_raw.parquet    → tabela: transactions_raw
+  ├── s3://bucket/staging/transactions_clean.parquet  → tabela: transactions_clean
+  ├── s3://bucket/output/table1_region_risk.parquet   → tabela: table1_region_risk
+  └── s3://bucket/output/table2_top3_receivers.parquet → tabela: table2_top3_receivers
+```
+
+O crawler é disparado ao final de cada pipeline via `GlueCrawlerOperator` no DAG (opcional):
+
+```python
+from airflow.providers.amazon.aws.operators.glue_crawler import GlueCrawlerOperator
+
+refresh_catalog = GlueCrawlerOperator(
+    task_id="refresh_glue_catalog",
+    config={"Name": "pipeline-crawler"},
+)
+export >> refresh_catalog >> trigger_next_run
+```
+
+Com as tabelas no catálogo, qualquer analista pode consultar os dados direto pelo console Athena sem precisar conhecer os caminhos S3.
+
+---
+
+## Mensageria de falhas
+
+Duas camadas de alertas, com escopos complementares:
+
+**Camada 1 — `on_failure_callback` no DAG** (zero infra extra, cobre falhas de tasks)
+
+```python
+import requests
+
+def _notify_failure(context):
+    dag_id   = context["dag"].dag_id
+    task_id  = context["task_instance"].task_id
+    run_id   = context["run_id"]
+    log_url  = context["task_instance"].log_url
+    msg = f":red_circle: *{dag_id} / {task_id}* falhou\nRun: `{run_id}`\n<{log_url}|Ver log>"
+    for url in (os.getenv("SLACK_WEBHOOK_URL"), os.getenv("TEAMS_WEBHOOK_URL")):
+        if url:
+            requests.post(url, json={"text": msg}, timeout=5)
+
+default_args = {
+    ...
+    "on_failure_callback": _notify_failure,
+}
+```
+
+**Camada 2 — CloudWatch Alarms → SNS** (cobre falhas de infra e fila represada)
+
+| Alarme | Métrica | Threshold | Destino |
+|---|---|---|---|
+| DAG falhou | `MWAA/DAGRunFailed` | ≥ 1 | SNS → e-mail + Slack + Teams |
+| Fargate task saiu com erro | `ECS/TaskExitCode ≠ 0` | ≥ 1 | SNS → e-mail |
+| DLQ com mensagens | `SQS/ApproximateNumberOfMessagesVisible` DLQ | ≥ 1 | SNS → e-mail + Slack |
+| Arquivo não processado há N horas | Metric Math sobre SQS age | configurável | SNS → e-mail |
+
+O SNS topic tem três subscrições: e-mail, endpoint HTTP do Slack webhook e endpoint HTTP do Teams webhook (via `aws_sns_topic_subscription` no Terraform).
 
 ---
 
