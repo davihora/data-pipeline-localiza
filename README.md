@@ -1,3 +1,6 @@
+<img width="400" height="200" alt="image" src="https://github.com/user-attachments/assets/b509560f-f6ed-46c7-9332-71fb2edfd232" />
+
+
 # Blockchain Transactions Pipeline
 
 Pipeline de dados ponta a ponta para ingestão, limpeza, validação e agregação de transações blockchain — orquestrado com Apache Airflow e containerizado via Docker Compose.
