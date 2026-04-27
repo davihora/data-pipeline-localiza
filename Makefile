@@ -78,9 +78,7 @@ wait: ## Poll until the latest DAG run finishes (Ctrl-C to abort)
 	@echo "Polling run state for '$(DAG_ID)' (Ctrl-C to abort)..."
 	@while true; do \
 	  STATE=$$($(AIRFLOW) dags list-runs --dag-id $(DAG_ID) -o json 2>/dev/null \
-	    | python3 -c "import json,sys; \
-	      runs=json.load(sys.stdin); \
-	      print(runs[0]['state'] if runs else 'no_runs')" 2>/dev/null \
+	    | python3 -c "import json,sys; lines=[l.strip() for l in sys.stdin if l.strip().startswith('[{') or l.strip()=='[]']; print(json.loads(lines[0])[0]['state'] if lines and json.loads(lines[0]) else 'no_runs')" 2>/dev/null \
 	    || echo "unreachable"); \
 	  printf "  state: $$STATE\n"; \
 	  case "$$STATE" in \
