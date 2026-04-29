@@ -137,9 +137,13 @@ O SQLite é usado como banco de metadados do Airflow (sem necessidade de um serv
 
 ### Pré-requisitos
 
-- Docker Desktop (ou Colima no macOS)
+- Docker Desktop (ou Colima no macOS) **em execução** antes de qualquer `make`
+- Porta **8080 livre** no host (usada pelo webserver do Airflow)
 - `make` (pré-instalado no macOS/Linux)
+- Python 3 (pré-instalado no macOS/Linux) — usado por `make setup` para gerar as chaves
 - ~2 GB de espaço em disco
+
+> **Primeiro clone:** `make setup` cria automaticamente o `.env` com `AIRFLOW_FERNET_KEY` e `AIRFLOW_SECRET_KEY` gerados, o arquivo `airflow.db` necessário para o bind-mount SQLite, e os diretórios de trabalho. Se `airflow.db` existir como diretório (criado incorretamente pelo Docker em uma tentativa anterior), `make setup` o remove e recria corretamente. Após o primeiro `make up`, execute `make lock` para gerar o `poetry.lock` e faça commit para builds reprodutíveis.
 
 ### Execução com Make (recomendado)
 
@@ -161,7 +165,7 @@ Equivale a executar em sequência: `setup` → `build` → `init` → `up` → `
 #### Passo a passo
 
 ```bash
-# Criar diretórios e .env (se não existirem)
+# Criar diretórios, airflow.db e .env com chaves geradas automaticamente
 make setup
 
 # Construir a imagem Docker customizada
@@ -188,7 +192,7 @@ make results
 | Alvo | Descrição |
 |---|---|
 | `make pipeline` | Ciclo completo: setup → build → init → up → run → wait → results |
-| `make setup` | Cria diretórios e `.env` a partir do `.env.example` |
+| `make setup` | Cria diretórios, `airflow.db`, e `.env` com chaves geradas automaticamente |
 | `make build` | Constrói a imagem Docker |
 | `make init` | Inicializa o banco Airflow e cria o usuário admin |
 | `make up` | Sobe webserver + scheduler (aguarda healthcheck) |
@@ -199,6 +203,7 @@ make results
 | `make logs-scheduler` | Tail dos logs do container scheduler |
 | `make logs-webserver` | Tail dos logs do container webserver |
 | `make clean-data` | Remove artefatos de staging e output (mantém dados raw) |
+| `make lock` | Gera `poetry.lock` dentro do container e copia para o host (commit após gerar) |
 | `make reset` | Para containers + apaga todos os dados gerados |
 | `make down` | Para todos os containers |
 

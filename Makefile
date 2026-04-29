@@ -31,11 +31,19 @@ help: ## Show available targets
 # Infrastructure
 # ---------------------------------------------------------------------------
 .PHONY: setup
-setup: ## Create host directories and .env (if missing)
-	mkdir -p data/staging data/output logs plugins
+setup: ## Create host directories, airflow.db stub, and .env with generated keys (if missing)
+	mkdir -p data/staging data/output logs plugins great_expectations/gx/uncommitted
+	@if [ -d airflow.db ]; then \
+	  rmdir airflow.db 2>/dev/null && echo "Removed airflow.db directory (was created incorrectly by Docker)."; \
+	fi
+	@if [ ! -f airflow.db ]; then \
+	  touch airflow.db; \
+	  echo "Created empty airflow.db (required for SQLite bind-mount)."; \
+	fi
 	@if [ ! -f .env ]; then \
 	  cp .env.example .env; \
-	  echo "Created .env from .env.example — review the secrets before production use."; \
+	  python3 -c "import os,base64,secrets,re; p=open('.env').read(); fk=base64.urlsafe_b64encode(os.urandom(32)).decode(); sk=secrets.token_hex(32); p=re.sub(r'AIRFLOW_FERNET_KEY=.*',  'AIRFLOW_FERNET_KEY='+fk,  p); p=re.sub(r'AIRFLOW_SECRET_KEY=.*', 'AIRFLOW_SECRET_KEY='+sk, p); open('.env','w').write(p)"; \
+	  echo "Created .env with auto-generated AIRFLOW_FERNET_KEY and AIRFLOW_SECRET_KEY."; \
 	fi
 
 .PHONY: build
@@ -108,8 +116,10 @@ results: ## Print the output CSVs to terminal
 # Logs
 # ---------------------------------------------------------------------------
 .PHONY: lock
-lock: ## Regenerate poetry.lock inside the webserver container
-	$(EXEC) sh -c "poetry lock --no-update && cp poetry.lock /opt/airflow/"
+lock: ## Regenerate poetry.lock inside the webserver container and copy to host
+	$(EXEC) poetry lock --no-update
+	$(COMPOSE) cp airflow-webserver:/opt/airflow/poetry.lock poetry.lock
+	@echo "poetry.lock updated — commit it to make builds reproducible."
 
 .PHONY: test
 test: ## Run unit tests inside the webserver container
