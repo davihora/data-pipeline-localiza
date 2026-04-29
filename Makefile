@@ -60,7 +60,7 @@ up: ## Start webserver + scheduler in the background
 	@echo "Waiting for Airflow webserver to become healthy..."
 	@for i in $$(seq 1 40); do \
 	  STATUS=$$(curl -sf $(WEBSERVER_URL)/health \
-	    | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null); \
+	    | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('metadatabase',{}).get('status',''))" 2>/dev/null); \
 	  if [ "$$STATUS" = "healthy" ]; then \
 	    echo "Airflow is ready at $(WEBSERVER_URL) (user: $(ADMIN_USER))"; \
 	    break; \
@@ -76,7 +76,8 @@ down: ## Stop all containers
 # Pipeline execution
 # ---------------------------------------------------------------------------
 .PHONY: run
-run: ## Trigger the transactions_pipeline DAG
+run: ## Unpause and trigger the transactions_pipeline DAG
+	$(AIRFLOW) dags unpause $(DAG_ID)
 	@echo "Triggering DAG '$(DAG_ID)'..."
 	$(AIRFLOW) dags trigger $(DAG_ID)
 	@echo "DAG triggered. Run 'make wait' to poll for completion."
